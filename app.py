@@ -20,5 +20,24 @@ def register():
     add_user(username, password, role)
     return jsonify({'message': 'User registered successfully'}), 201
 
+# Login endpoint
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+
+    cursor = mysql.connection.cursor()
+    query = "SELECT * FROM users WHERE username = %s AND password = %s"
+    cursor.execute(query, (username, password))
+    user = cursor.fetchone()
+
+    if user:
+        access_token = create_access_token(identity=username)
+        return jsonify(access_token=access_token), 200
+    else:
+        return jsonify(message="Invalid credentials"), 401
+
+
 if __name__ == '__main__':
     app.run(debug=True)
