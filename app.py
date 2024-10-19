@@ -175,6 +175,38 @@ def update_rating(movie_id):
         return jsonify({"message": "Failed to update rating"}), 500
 
 
+@app.route('/ratings/<int:rating_id>', methods=['DELETE'])
+@jwt_required()
+def delete_user_rating(rating_id):
+    current_user = get_jwt_identity()
+
+    # Verify if the current user is an admin
+    cursor = mysql.connection.cursor()
+    query = "SELECT role FROM users WHERE username = %s"
+    cursor.execute(query, (current_user,))
+    user = cursor.fetchone()
+
+    if not user or user['role'] != 'admin':
+        return jsonify({"message": "Admins only!"}), 403  # Forbidden
+
+    try:
+        # Check if the rating exists
+        cursor.execute("SELECT * FROM ratings WHERE id = %s", (rating_id,))
+        rating = cursor.fetchone()
+
+        if not rating:
+            return jsonify({"message": "Rating not found"}), 404
+
+        # Delete the rating
+        delete_query = "DELETE FROM ratings WHERE id = %s"
+        cursor.execute(delete_query, (rating_id,))
+        mysql.connection.commit()
+
+        return jsonify({"message": "Rating deleted successfully!"}), 200
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({"message": "Failed to delete rating"}), 500
 
 
 
