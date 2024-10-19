@@ -17,20 +17,9 @@ def register():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
-    role = data.get('role')
-
-    # Validate the role - only "admin" or "user" allowed
-    if role not in ["admin", "user"]:
-        return jsonify({"message": "Invalid role. Only 'admin' or 'user' are allowed."}), 400
-
-    try:
-        # Register the new user with the provided role
-        add_user(username, password, role)
-        return jsonify({'message': 'User registered successfully'}), 201
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({'message': 'Failed to register user'}), 500
-    
+    role = data.get('role', 'user')
+    add_user(username, password, role)
+    return jsonify({'message': 'User registered successfully'}), 201
 
 # Login endpoint
 @app.route('/login', methods=['POST'])
@@ -80,19 +69,11 @@ def add_movie():
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"message": "Failed to add movie"}), 500
-    
+
 @app.route('/ratings', methods=['POST'])
 @jwt_required()
 def submit_rating():
     current_user = get_jwt_identity()
-
-    # Get the user role from the database using the username from the JWT token
-    cursor = mysql.connection.cursor()
-    cursor.execute("SELECT role FROM users WHERE username = %s", (current_user,))
-    user = cursor.fetchone()
-
-    if not user or user['role'] == 'admin':
-        return jsonify({"message": "Admins are not allowed to submit ratings."}), 403  # Forbidden
 
     # Get the movie_id and rating from the request body
     data = request.get_json()
@@ -100,6 +81,7 @@ def submit_rating():
     rating = data.get('rating')
 
     # Check if the movie exists in the database
+    cursor = mysql.connection.cursor()
     cursor.execute("SELECT * FROM movies WHERE id = %s", (movie_id,))
     movie = cursor.fetchone()
 
@@ -116,132 +98,55 @@ def submit_rating():
         print(f"Error: {e}")
         return jsonify({"message": "Failed to submit rating"}), 500
 
-@app.route('/movies/<int:movie_id>', methods=['GET'])
+@app.route('/movie/<int:id>', methods=['GET'])
 @jwt_required()
-def get_movie_details(movie_id):
-    current_user = get_jwt_identity()
+def get_movie(id):
+    cursor = mysql.connection.cursor()
+    cursor.execute("SELECT * FROM movies WHERE id = %s", (id,))
+    movie = cursor.fetchone()
 
-    try:
-        # Fetch movie details from the 'movies' table
-        cursor = mysql.connection.cursor()
-        cursor.execute("SELECT * FROM movies WHERE id = %s", (movie_id,))
-        movie = cursor.fetchone()
+    if not movie:
+        return jsonify({"message": "Movie not found"}), 404
 
-        if not movie:
-            return jsonify({"message": "Movie not found"}), 404
+    cursor.execute("SELECT rating FROM ratings WHERE movie_id = %s", (id,))
+    ratings = cursor.fetchall()
 
-        # Fetch all ratings for the given movie from the 'ratings' table
-        cursor.execute("SELECT username, rating FROM ratings WHERE movie_id = %s", (movie_id,))
-        ratings = cursor.fetchall()
+    return jsonify({
+        "movie": movie,
+        "ratings": ratings
+    }), 200
 
-        # Combine movie details with ratings
-        movie_details = {
-            "id": movie['id'],
-            "title": movie['title'],
-            "description": movie['description'],
-            "ratings": ratings
-        }
-
-        return jsonify(movie_details), 200
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"message": "Failed to fetch movie details"}), 500
-
-
-@app.route('/ratings/<int:movie_id>', methods=['PUT'])
+@app.route('/update-rating/<int:id>', methods=['PUT'])
 @jwt_required()
-def update_rating(movie_id):
+def update_rating(id):
     current_user = get_jwt_identity()
-
-    # Get the new rating from the request body
     data = request.get_json()
     new_rating = data.get('rating')
 
-    if new_rating is None:
-        return jsonify({"message": "New rating is required"}), 400
+    cursor = mysql.connection.cursor()
+    cursor.execute("UPDATE ratings SET rating = %s WHERE movie_id = %s AND username = %s", (new_rating, id, current_user))
+    mysql.connection.commit()
 
-    try:
-        # Check if the rating exists for the current user and movie
-        cursor = mysql.connection.cursor()
-        query = "SELECT * FROM ratings WHERE username = %s AND movie_id = %s"
-        cursor.execute(query, (current_user, movie_id))
-        rating = cursor.fetchone()
+    return jsonify({"message": "Rating updated!"}), 200
 
-        if not rating:
-            return jsonify({"message": "No existing rating found for this movie"}), 404
-
-        # Update the user's rating for the movie
-        update_query = "UPDATE ratings SET rating = %s WHERE username = %s AND movie_id = %s"
-        cursor.execute(update_query, (new_rating, current_user, movie_id))
-        mysql.connection.commit()
-
-        return jsonify({"message": "Rating updated successfully"}), 200
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"message": "Failed to update rating"}), 500
-
-
-@app.route('/ratings/<int:rating_id>', methods=['DELETE'])
+@app.route('/admin/delete-rating/<int:rating_id>', methods=['DELETE'])
 @jwt_required()
-def delete_user_rating(rating_id):
+def delete_rating(rating_id):
     current_user = get_jwt_identity()
 
-    # Verify if the current user is an admin
+    # Check if the user is an admin
     cursor = mysql.connection.cursor()
-    query = "SELECT role FROM users WHERE username = %s"
-    cursor.execute(query, (current_user,))
+    cursor.execute("SELECT role FROM users WHERE username = %s", (current_user,))
     user = cursor.fetchone()
 
-    if not user or user['role'] != 'admin':
-        return jsonify({"message": "Admins only!"}), 403  # Forbidden
+    if user['role'] != 'admin':
+        return jsonify({"message": "Admins only!"}), 403
 
-    try:
-        # Check if the rating exists
-        cursor.execute("SELECT * FROM ratings WHERE id = %s", (rating_id,))
-        rating = cursor.fetchone()
+    cursor.execute("DELETE FROM ratings WHERE id = %s", (rating_id,))
+    mysql.connection.commit()
 
-        if not rating:
-            return jsonify({"message": "Rating not found"}), 404
+    return jsonify({"message": "Rating deleted!"}), 200
 
-        # Delete the rating
-        delete_query = "DELETE FROM ratings WHERE id = %s"
-        cursor.execute(delete_query, (rating_id,))
-        mysql.connection.commit()
-
-        return jsonify({"message": "Rating deleted successfully!"}), 200
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"message": "Failed to delete rating"}), 500
-    
-
-@app.route('/ratings/<int:rating_id>', methods=['DELETE'])
-@jwt_required()
-def delete_own_rating(rating_id):
-    current_user = get_jwt_identity()
-
-    try:
-        # Check if the rating exists and belongs to the current user
-        cursor = mysql.connection.cursor()
-        query = "SELECT * FROM ratings WHERE id = %s AND username = %s"
-        cursor.execute(query, (rating_id, current_user))
-        rating = cursor.fetchone()
-
-        if not rating:
-            return jsonify({"message": "Rating not found or does not belong to the user"}), 404
-
-        # Delete the rating
-        delete_query = "DELETE FROM ratings WHERE id = %s"
-        cursor.execute(delete_query, (rating_id,))
-        mysql.connection.commit()
-
-        return jsonify({"message": "Rating deleted successfully!"}), 200
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"message": "Failed to delete rating"}), 500
 
 
 
