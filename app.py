@@ -116,45 +116,6 @@ def submit_rating():
         print(f"Error: {e}")
         return jsonify({"message": "Failed to submit rating"}), 500
 
-
-# @app.route('/ratings', methods=['POST'])
-# @jwt_required()
-# def submit_rating():
-#     current_user = get_jwt_identity()
-
-#     # Get the movie_id and rating from the request body
-#     data = request.get_json()
-#     movie_id = data.get('movie_id')
-#     rating = data.get('rating')
-
-#     # Check if the movie exists in the database
-#     cursor = mysql.connection.cursor()
-#     cursor.execute("SELECT * FROM movies WHERE id = %s", (movie_id,))
-#     movie = cursor.fetchone()
-
-#     if not movie:
-#         return jsonify({"message": "Movie not found"}), 404
-
-#     # Insert the rating into the ratings table
-#     try:
-#         query = "INSERT INTO ratings (username, movie_id, rating) VALUES (%s, %s, %s)"
-#         cursor.execute(query, (current_user, movie_id, rating))
-#         mysql.connection.commit()
-#         return jsonify({"message": "Rating submitted successfully!"}), 201
-#     except Exception as e:
-#         print(f"Error: {e}")
-#         return jsonify({"message": "Failed to submit rating"}), 500
-
-# @app.route('/displayratings', methods=['GET'])
-# def get_all_ratings():
-#     cursor = mysql.connection.cursor()
-#     query = "SELECT * FROM ratings"
-#     cursor.execute(query)
-#     ratings = cursor.fetchall()
-
-#     return jsonify(ratings), 200
-
-
 @app.route('/movies/<int:movie_id>', methods=['GET'])
 @jwt_required()
 def get_movie_details(movie_id):
@@ -281,7 +242,6 @@ def delete_own_rating(rating_id):
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"message": "Failed to delete rating"}), 500
-
 
 
 
