@@ -108,6 +108,73 @@ def get_all_ratings():
     return jsonify(ratings), 200
 
 
+@app.route('/movies/<int:movie_id>', methods=['GET'])
+@jwt_required()
+def get_movie_details(movie_id):
+    current_user = get_jwt_identity()
+
+    try:
+        # Fetch movie details from the 'movies' table
+        cursor = mysql.connection.cursor()
+        cursor.execute("SELECT * FROM movies WHERE id = %s", (movie_id,))
+        movie = cursor.fetchone()
+
+        if not movie:
+            return jsonify({"message": "Movie not found"}), 404
+
+        # Fetch all ratings for the given movie from the 'ratings' table
+        cursor.execute("SELECT username, rating FROM ratings WHERE movie_id = %s", (movie_id,))
+        ratings = cursor.fetchall()
+
+        # Combine movie details with ratings
+        movie_details = {
+            "id": movie['id'],
+            "title": movie['title'],
+            "description": movie['description'],
+            "ratings": ratings
+        }
+
+        return jsonify(movie_details), 200
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({"message": "Failed to fetch movie details"}), 500
+
+
+@app.route('/ratings/<int:movie_id>', methods=['PUT'])
+@jwt_required()
+def update_rating(movie_id):
+    current_user = get_jwt_identity()
+
+    # Get the new rating from the request body
+    data = request.get_json()
+    new_rating = data.get('rating')
+
+    if new_rating is None:
+        return jsonify({"message": "New rating is required"}), 400
+
+    try:
+        # Check if the rating exists for the current user and movie
+        cursor = mysql.connection.cursor()
+        query = "SELECT * FROM ratings WHERE username = %s AND movie_id = %s"
+        cursor.execute(query, (current_user, movie_id))
+        rating = cursor.fetchone()
+
+        if not rating:
+            return jsonify({"message": "No existing rating found for this movie"}), 404
+
+        # Update the user's rating for the movie
+        update_query = "UPDATE ratings SET rating = %s WHERE username = %s AND movie_id = %s"
+        cursor.execute(update_query, (new_rating, current_user, movie_id))
+        mysql.connection.commit()
+
+        return jsonify({"message": "Rating updated successfully"}), 200
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({"message": "Failed to update rating"}), 500
+
+
 
 
 
