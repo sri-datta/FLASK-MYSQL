@@ -207,6 +207,34 @@ def delete_user_rating(rating_id):
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"message": "Failed to delete rating"}), 500
+    
+
+@app.route('/ratings/<int:rating_id>', methods=['DELETE'])
+@jwt_required()
+def delete_own_rating(rating_id):
+    current_user = get_jwt_identity()
+
+    try:
+        # Check if the rating exists and belongs to the current user
+        cursor = mysql.connection.cursor()
+        query = "SELECT * FROM ratings WHERE id = %s AND username = %s"
+        cursor.execute(query, (rating_id, current_user))
+        rating = cursor.fetchone()
+
+        if not rating:
+            return jsonify({"message": "Rating not found or does not belong to the user"}), 404
+
+        # Delete the rating
+        delete_query = "DELETE FROM ratings WHERE id = %s"
+        cursor.execute(delete_query, (rating_id,))
+        mysql.connection.commit()
+
+        return jsonify({"message": "Rating deleted successfully!"}), 200
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({"message": "Failed to delete rating"}), 500
+
 
 
 
