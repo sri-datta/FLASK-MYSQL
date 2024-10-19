@@ -98,6 +98,16 @@ def submit_rating():
         print(f"Error: {e}")
         return jsonify({"message": "Failed to submit rating"}), 500
 
+@app.route('/displayratings', methods=['GET'])
+def get_all_ratings():
+    cursor = mysql.connection.cursor()
+    query = "SELECT * FROM ratings"
+    cursor.execute(query)
+    ratings = cursor.fetchall()
+
+    return jsonify(ratings), 200
+
+
 
 
 
