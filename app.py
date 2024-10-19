@@ -17,9 +17,20 @@ def register():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
-    role = data.get('role', 'user')
-    add_user(username, password, role)
-    return jsonify({'message': 'User registered successfully'}), 201
+    role = data.get('role')
+
+    # Validate the role - only "admin" or "user" allowed
+    if role not in ["admin", "user"]:
+        return jsonify({"message": "Invalid role. Only 'admin' or 'user' are allowed."}), 400
+
+    try:
+        # Register the new user with the provided role
+        add_user(username, password, role)
+        return jsonify({'message': 'User registered successfully'}), 201
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'message': 'Failed to register user'}), 500
+    
 
 # Login endpoint
 @app.route('/login', methods=['POST'])
@@ -69,11 +80,19 @@ def add_movie():
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"message": "Failed to add movie"}), 500
-
+    
 @app.route('/ratings', methods=['POST'])
 @jwt_required()
 def submit_rating():
     current_user = get_jwt_identity()
+
+    # Get the user role from the database using the username from the JWT token
+    cursor = mysql.connection.cursor()
+    cursor.execute("SELECT role FROM users WHERE username = %s", (current_user,))
+    user = cursor.fetchone()
+
+    if not user or user['role'] == 'admin':
+        return jsonify({"message": "Admins are not allowed to submit ratings."}), 403  # Forbidden
 
     # Get the movie_id and rating from the request body
     data = request.get_json()
@@ -81,7 +100,6 @@ def submit_rating():
     rating = data.get('rating')
 
     # Check if the movie exists in the database
-    cursor = mysql.connection.cursor()
     cursor.execute("SELECT * FROM movies WHERE id = %s", (movie_id,))
     movie = cursor.fetchone()
 
@@ -98,14 +116,43 @@ def submit_rating():
         print(f"Error: {e}")
         return jsonify({"message": "Failed to submit rating"}), 500
 
-@app.route('/displayratings', methods=['GET'])
-def get_all_ratings():
-    cursor = mysql.connection.cursor()
-    query = "SELECT * FROM ratings"
-    cursor.execute(query)
-    ratings = cursor.fetchall()
 
-    return jsonify(ratings), 200
+# @app.route('/ratings', methods=['POST'])
+# @jwt_required()
+# def submit_rating():
+#     current_user = get_jwt_identity()
+
+#     # Get the movie_id and rating from the request body
+#     data = request.get_json()
+#     movie_id = data.get('movie_id')
+#     rating = data.get('rating')
+
+#     # Check if the movie exists in the database
+#     cursor = mysql.connection.cursor()
+#     cursor.execute("SELECT * FROM movies WHERE id = %s", (movie_id,))
+#     movie = cursor.fetchone()
+
+#     if not movie:
+#         return jsonify({"message": "Movie not found"}), 404
+
+#     # Insert the rating into the ratings table
+#     try:
+#         query = "INSERT INTO ratings (username, movie_id, rating) VALUES (%s, %s, %s)"
+#         cursor.execute(query, (current_user, movie_id, rating))
+#         mysql.connection.commit()
+#         return jsonify({"message": "Rating submitted successfully!"}), 201
+#     except Exception as e:
+#         print(f"Error: {e}")
+#         return jsonify({"message": "Failed to submit rating"}), 500
+
+# @app.route('/displayratings', methods=['GET'])
+# def get_all_ratings():
+#     cursor = mysql.connection.cursor()
+#     query = "SELECT * FROM ratings"
+#     cursor.execute(query)
+#     ratings = cursor.fetchall()
+
+#     return jsonify(ratings), 200
 
 
 @app.route('/movies/<int:movie_id>', methods=['GET'])
