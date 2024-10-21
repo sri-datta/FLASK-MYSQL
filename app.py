@@ -2,10 +2,13 @@ from flask import Flask, request, jsonify
 from config import init_db, mysql
 from models import add_user
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+import os
 
 
 app = Flask(__name__)
 app.config['JWT_SECRET_KEY'] = 'your-secret-key'
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload size
 jwt = JWTManager(app)
 
 # Initialize the database
@@ -252,6 +255,40 @@ def delete_rating(rating_id):
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"message": "Failed to delete rating"}), 500
+
+# Set of allowed extensions
+ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'pdf', 'txt'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# File upload endpoint
+@app.route('/upload', methods=['POST'])
+@jwt_required()
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({"message": "No file part in the request"}), 400
+
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({"message": "No selected file"}), 400
+
+    if file and allowed_file(file.filename):
+        filename = file.filename
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        try:
+            file.save(file_path)
+            return jsonify({"message": f"File '{filename}' uploaded successfully!"}), 201
+        except Exception as e:
+            print(f"Error: {e}")
+            return jsonify({"message": "Failed to upload file"}), 500
+    else:
+        return jsonify({"message": "Unsupported file extension"}), 400
+
+# Ensure the upload folder exists
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
 
 
 if __name__ == '__main__':
